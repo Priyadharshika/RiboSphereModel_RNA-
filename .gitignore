@@ -1,0 +1,38 @@
+@"
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+
+.ipynb_checkpoints/
+
+# Large datasets
+*.cif
+*.mmcif
+*.tar
+*.tar.xz
+*.zip
+
+# Model checkpoints
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+
+# Experiment outputs
+results/
+checkpoints/
+outputs/
+logs/
+
+Dataset/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+"@ | Out-File -Encoding utf8 .gitignore
