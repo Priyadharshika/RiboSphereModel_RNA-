@@ -1,101 +1,55 @@
 import numpy as np
 import torch
-from biotite.structure import io as pdbx
-
+from biotite.structure as struc
+import io as pdbx
+from biotite.structure.io.pdbx import CIFFile, get_structure
 from .config import ATOM_NAMES
 
 
 def process_rna_cif(cif_path):
-    """
-    Process an RNA CIF file into a centered coordinate tensor.
-
-    Parameters
-    ----------
-    cif_path : str or Path
-        Path to the CIF file.
-
-    Returns
-    -------
-    torch.Tensor or None
-        Tensor of shape [L, 10, 3], where:
-        L = number of valid RNA residues
-        10 = selected backbone atoms
-        3 = XYZ coordinates
-
-        Returns None if the structure cannot be processed.
-    """
-
     try:
-        # Read CIF file
-        cif_file = pdbx.CIFFile.read(str(cif_path))
+        cif_file = CIFFile.read(str(cif_path))
+        structure = get_structure(cif_file, model=1)
 
-        # Extract first model
-        structure = pdbx.get_structure(cif_file, model=1)
-
-        # Keep only required RNA backbone atoms
-        mask = np.isin(structure.atom_name, ATOM_NAMES)
+        # Keep RNA nucleotides
+        mask = np.isin(structure.res_name, ["A", "U", "G", "C"])
         structure = structure[mask]
 
         if len(structure) == 0:
             return None
 
-        # Get residue IDs
-        residue_ids = structure.res_id
-        unique_residues = np.unique(residue_ids)
+        atom_names = [
+            "P", "C5'", "C4'", "C3'", "C2'",
+            "C1'", "O5'", "O4'", "O3'", "O2'"
+        ]
 
-        coordinates = []
+        coords = []
 
-        for residue_id in unique_residues:
+        for residue in struc.residue_iter(structure):
+            residue_coords = []
 
-            residue_atoms = structure[
-                residue_ids == residue_id
-            ]
+            for atom_name in atom_names:
+                idx = np.where(residue.atom_name == atom_name)[0]
 
-            atom_coords = []
-            valid = True
-
-            for atom_name in ATOM_NAMES:
-
-                atom = residue_atoms[
-                    residue_atoms.atom_name == atom_name
-                ]
-
-                # Residue is incomplete
-                if len(atom) == 0:
-                    valid = False
+                if len(idx) == 0:
+                    residue_coords = []
                     break
 
-                # Take first occurrence
-                atom_coords.append(atom.coord[0])
+                residue_coords.append(residue.coord[idx[0]])
 
-            # Keep only complete residues
-            if valid:
-                coordinates.append(atom_coords)
+            if len(residue_coords) == 10:
+                coords.append(residue_coords)
 
-        if len(coordinates) == 0:
+        if not coords:
             return None
 
-        # Convert to tensor
-        # Shape: [L, 10, 3]
-        x = torch.tensor(
-            np.array(coordinates),
-            dtype=torch.float32
-        )
+        coords = np.asarray(coords, dtype=np.float32)
 
-        # Mean-center coordinates
-        center = x.mean(
-            dim=(0, 1),
-            keepdim=True
-        )
+        # Mean-center only — NO random rotation
+        coords -= coords.mean(axis=(0, 1), keepdims=True)
 
-        x_centered = x - center
-
-        return x_centered
+        return torch.tensor(coords, dtype=torch.float32)
 
     except Exception as e:
-
-        print(
-            f"Error processing {cif_path.name}: {e}"
-        )
-
+        print(f"Error processing {cif_path.name}: {e}")
         return None
